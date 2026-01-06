@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>SIM POS + Invoice + Barcode + Excel Import</title>
+<title>SIM Shop Manager</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -36,46 +36,33 @@ header {
 
 .main { flex: 1; padding: 10px; }
 
-input, textarea, button { width: 100%; padding: 8px; margin-top: 6px; font-size: 14px; }
+input, button { width: 100%; padding: 8px; margin-top: 6px; font-size: 14px; }
 button { background: #0d6efd; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
 button.green { background: #198754; }
 button.red { background: #dc3545; }
-button.gray { background: #6c757d; }
 
-.sim-item, .invoice-item { border: 1px solid #ddd; padding: 8px; margin-bottom: 6px; border-radius: 6px; }
-#cameraBox { display: none; margin-top: 6px; }
-video { width: 100%; border-radius: 8px; }
+.sim-item { border: 1px solid #ddd; padding: 8px; margin-bottom: 6px; border-radius: 6px; }
 
-.invoice { background: #fff; padding: 10px; border-radius: 6px; border: 1px solid #ddd; }
-.invoice h3 { text-align: center; margin: 5px 0; }
-
-@media print {
-  body * { visibility: hidden; }
-  .invoice, .invoice * { visibility: visible; }
-  .invoice { position: absolute; left: 0; top: 0; width: 100%; }
-}
+#cameraBox { display:none; margin-top:6px; }
+video { width:100%; border-radius:8px; }
 </style>
 </head>
-
 <body>
 
-<header>🧾 SIM POS + Invoice + Barcode + Excel Import</header>
+<header>📦 SIM Shop Manager</header>
 
 <div class="container">
 
-<!-- LEFT -->
+<!-- LEFT: Add SIM / Scan / Import -->
 <div class="sidebar">
   <h3>➕ Add / Scan SIM</h3>
-
   <input id="simNumber" placeholder="Scan SERIAL (USB / Camera)">
   <input id="isdn" placeholder="ISDN (Auto)">
   <input id="buyPrice" type="number" placeholder="Buy Price">
   <input id="sellPrice" type="number" placeholder="Sell Price">
-
-  <button class="green" onclick="addToInvoice()">➕ Add to Invoice</button>
+  <button class="green" onclick="addToStock()">➕ Add to Stock</button>
 
   <hr>
-
   <button class="green" onclick="startScan()">📷 Camera Scan</button>
   <div id="cameraBox">
     <video id="video" autoplay></video>
@@ -91,19 +78,9 @@ video { width: 100%; border-radius: 8px; }
   <div id="simList"></div>
 </div>
 
-<!-- RIGHT -->
+<!-- RIGHT: Optional details / Print -->
 <div class="main">
-  <div class="invoice" id="invoice">
-    <h3>SIM INVOICE</h3>
-    <div>Date: <span id="invDate"></span></div>
-    <hr>
-    <div id="invoiceList"></div>
-    <hr>
-    <b>Total: $<span id="total">0</span></b>
-  </div>
-
-  <button class="green" onclick="printInvoice()">🖨 Print Invoice</button>
-  <button class="gray" onclick="clearInvoice()">🧹 Clear Invoice</button>
+  <button class="green" onclick="printStock()">🖨 Print Stock</button>
 </div>
 
 </div>
@@ -113,25 +90,20 @@ video { width: 100%; border-radius: 8px; }
    INIT
 ===================== */
 let stock = JSON.parse(localStorage.getItem("stock") || "[]");
-let invoice = [];
+let serialMap = JSON.parse(localStorage.getItem("serialMap") || "{}");
 renderStock();
-document.getElementById("invDate").innerText = new Date().toLocaleString();
 
 /* =====================
-   SERIAL → ISDN Mapping
+   Import CSV Excel
 ===================== */
-let serialMap = JSON.parse(localStorage.getItem("serialMap") || "{}");
-
-/* Import CSV (Excel Save as CSV) */
-function importExcel(e) {
-  const file = e.target.files[0];
-  if (!file) return;
+function importExcel(e){
+  const file = e.target.files[0]; if(!file) return;
   const reader = new FileReader();
-  reader.onload = () => {
+  reader.onload = ()=>{
     const lines = reader.result.split("\n");
-    lines.slice(1).forEach(line => {
+    lines.slice(1).forEach(line=>{
       const [serial, isdn] = line.split(",");
-      if (serial && isdn) serialMap[serial.trim()] = isdn.trim();
+      if(serial && isdn) serialMap[serial.trim()] = isdn.trim();
     });
     localStorage.setItem("serialMap", JSON.stringify(serialMap));
     alert("Import SERIAL → ISDN success");
@@ -140,89 +112,69 @@ function importExcel(e) {
 }
 
 /* =====================
-   SCAN SERIAL (USB + Camera)
+   Add to Stock
 ===================== */
-function onSerialScanned(serial) {
-  simNumber.value = serial;
-  if (serialMap[serial]) isdn.value = serialMap[serial];
-  else isdn.value = "";
+function addToStock(){
+  if(!simNumber.value || !sellPrice.value){
+    alert("Scan SERIAL and set price"); return;
+  }
+  const item={
+    serial: simNumber.value,
+    isdn: isdn.value||"",
+    buy: Number(buyPrice.value||0),
+    sell: Number(sellPrice.value)
+  };
+  stock.push(item);
+  localStorage.setItem("stock", JSON.stringify(stock));
+  renderStock();
+  simNumber.value=isdn.value=buyPrice.value=sellPrice.value="";
 }
 
-/* USB Scanner (Keyboard Mode) */
-let buffer = "";
-document.addEventListener("keydown", e => {
-  if (e.key === "Enter") { onSerialScanned(buffer); buffer=""; }
-  else buffer += e.key;
+/* =====================
+   Render Stock
+===================== */
+function renderStock(){
+  simList.innerHTML="";
+  stock.forEach(s=>{
+    simList.innerHTML+=`<div class="sim-item"><b>${s.serial}</b> - ${s.isdn}<br>Buy: $${s.buy} | Sell: $${s.sell}</div>`;
+  });
+}
+
+/* =====================
+   Scan SERIAL (USB + Camera)
+===================== */
+function onSerialScanned(serial){
+  simNumber.value=serial;
+  if(serialMap[serial]) isdn.value=serialMap[serial];
+  else isdn.value="";
+}
+
+/* USB Scanner */
+let buffer="";
+document.addEventListener("keydown",e=>{
+  if(e.key==="Enter"){ onSerialScanned(buffer); buffer=""; }
+  else buffer+=e.key;
 });
 
 /* Camera Barcode */
 let stream, detector, timer;
-async function startScan() {
-  if (!("BarcodeDetector" in window)) {
-    alert("Camera barcode not supported");
-    return;
-  }
-  detector = new BarcodeDetector({ formats:["qr_code","code_128","ean_13"] });
-  stream = await navigator.mediaDevices.getUserMedia({ video:{facingMode:"environment"} });
-  video.srcObject = stream;
+async function startScan(){
+  if(!("BarcodeDetector" in window)){ alert("Camera barcode not supported"); return; }
+  detector=new BarcodeDetector({formats:["qr_code","code_128","ean_13"]});
+  stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
+  video.srcObject=stream;
   cameraBox.style.display="block";
-
-  timer = setInterval(async () => {
-    const codes = await detector.detect(video);
-    if (codes.length) { onSerialScanned(codes[0].rawValue); stopScan(); }
-  }, 400);
+  timer=setInterval(async()=>{
+    const codes=await detector.detect(video);
+    if(codes.length){ onSerialScanned(codes[0].rawValue); stopScan(); }
+  },400);
 }
-
-function stopScan() {
-  if(stream) stream.getTracks().forEach(t=>t.stop());
-  clearInterval(timer);
-  cameraBox.style.display="none";
-}
+function stopScan(){ if(stream) stream.getTracks().forEach(t=>t.stop()); clearInterval(timer); cameraBox.style.display="none"; }
 
 /* =====================
-   STOCK + INVOICE
+   Print Stock
 ===================== */
-function addToInvoice() {
-  if (!simNumber.value || !sellPrice.value) { alert("Scan SERIAL and set price"); return; }
-  const item = {
-    serial: simNumber.value,
-    isdn: isdn.value || "",
-    buy: Number(buyPrice.value||0),
-    sell: Number(sellPrice.value)
-  };
-  invoice.push(item);
-  stock.push(item);
-  saveStock();
-  renderInvoice();
-  renderStock();
-  simNumber.value = isdn.value = buyPrice.value = sellPrice.value = "";
-}
-
-function renderInvoice() {
-  invoiceList.innerHTML="";
-  let total=0;
-  invoice.forEach(i => {
-    total += i.sell;
-    invoiceList.innerHTML += `<div class="invoice-item">${i.serial} - ${i.isdn} - $${i.sell}</div>`;
-  });
-  document.getElementById("total").innerText=total;
-}
-
-function clearInvoice() { invoice=[]; renderInvoice(); }
-
-function renderStock() {
-  simList.innerHTML="";
-  stock.forEach(s => {
-    simList.innerHTML += `<div class="sim-item"><b>${s.serial}</b> - ${s.isdn}<br>Buy: $${s.buy} | Sell: $${s.sell}</div>`;
-  });
-}
-
-function saveStock() { localStorage.setItem("stock", JSON.stringify(stock)); }
-
-/* =====================
-   PRINT
-===================== */
-function printInvoice() { window.print(); }
+function printStock(){ window.print(); }
 </script>
 
 </body>
